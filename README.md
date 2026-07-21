@@ -2,7 +2,7 @@
 
 Having fun with the official [IDFG Fishing Planner](https://idfg.idaho.gov/ifwis/fishingplanner/). 
 
-Basic CLI, Charm-ified, bubble tea-ified TUI, and full fledged interactive map website.
+Basic CLI + Charm-ified, bubble tea-ified TUI + full fledged interactive map website.
 
 ### tl;dr:
 Two ways to use it, same underlying data:
