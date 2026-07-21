@@ -1,13 +1,16 @@
 # Idaho Stream Finder
 
-Having fun with the official [IDFG Fishing Planner](https://idfg.idaho.gov/ifwis/fishingplanner/). Basic CLI, Charm-ified, bubble tea-ified TUI, and full fledged interactive map website.
+Having fun with the official [IDFG Fishing Planner](https://idfg.idaho.gov/ifwis/fishingplanner/). 
 
+Basic CLI, Charm-ified, bubble tea-ified TUI, and full fledged interactive map website.
+
+### tl;dr:
 Two ways to use it, same underlying data:
 
 | | Requires | Run |
 |---|---|---|
 | **Website** | just a browser | open `index.html` |
-| **Terminal app** | [Go](https://go.dev/dl/) | `cd charm && go build -o streams-charm.exe . && ./streams-charm.exe` |
+| **TUI** | [Go](https://go.dev/dl/) | `cd charm && go build -o streams-charm.exe . && ./streams-charm.exe` |
 
 `streams.py` is a third, simpler option: a scriptable command-line query, no
 build step, just Python.
