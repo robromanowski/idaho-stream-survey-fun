@@ -1,0 +1,17 @@
+# Extra terminal apps not part of this repo's published set
+# (site + streams.py CLI + charm/ Bubble Tea app are the ones kept)
+streams_tui.py
+streams_charm.py
+streams_og_backup.py
+charm-tea/
+
+# Claude Code local state (machine-specific, not for sharing)
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# Go / compiled binaries
+*.exe
+*.exe~

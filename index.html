@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="field">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Idaho Stream Finder</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎣</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=Orbitron:wght@600;800&family=Chakra+Petch:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* ============ theme tokens ============ */
+  :root, [data-theme="field"] {
+    --font: 14px/1.45 system-ui, "Segoe UI", sans-serif;
+    --font-display: 600 18px/1.2 system-ui, "Segoe UI", sans-serif;
+    --bg: #f5f7f6; --panel: #ffffff; --panel-solid: #ffffff;
+    --ink: #1d2a26; --muted: #5f7269; --line: #dde5e1;
+    --accent: #17635a; --accent-ink: #ffffff; --accent-soft: #e3f0ee;
+    --plus: #17635a; --minus: #b0432f;
+    --head-bg: #123f39; --head-ink: #ffffff; --head-sub: #a8c6c0;
+    --th-bg: #ffffff; --row-hover: #e3f0ee; --row-sel: #d5e9e6;
+    --bw: 1px; --rad: 10px; --rad-sm: 7px;
+    --panel-shadow: none; --btn-shadow: none;
+    --ctl-bg: #ffffff;
+  }
+  [data-theme="brutal"] {
+    --font: 14px/1.45 "Space Grotesk", system-ui, sans-serif;
+    --font-display: 400 19px/1.2 "Archivo Black", system-ui, sans-serif;
+    --bg: #f2ede3; --panel: #fffdf5; --panel-solid: #fffdf5;
+    --ink: #111111; --muted: #4d4a42; --line: #111111;
+    --accent: #2d6a4f; --accent-ink: #ffffff; --accent-soft: #dcebe2;
+    --plus: #2d6a4f; --minus: #ef476f;
+    --head-bg: #2d6a4f; --head-ink: #ffffff; --head-sub: #bcd8c9;
+    --th-bg: #2d6a4f; --row-hover: #dcebe2; --row-sel: #9ec5b1;
+    --bw: 2px; --rad: 4px; --rad-sm: 4px;
+    --panel-shadow: 6px 6px 0 #111111; --btn-shadow: 3px 3px 0 #111111;
+    --ctl-bg: #ffffff;
+  }
+  /* brutal colorways (default = pine, set via data-brutal on <html>) */
+  [data-theme="brutal"][data-brutal="yellow"] {
+    --accent: #ffd23f; --accent-ink: #111111; --accent-soft: #ffeeb0;
+    --plus: #1a936f; --head-bg: #ffd23f; --head-ink: #111111; --head-sub: #3d3a30;
+    --th-bg: #ffd23f; --row-hover: #ffeeb0; --row-sel: #ffd23f;
+  }
+  [data-theme="brutal"][data-brutal="grass"] {
+    --accent: #6bcb77; --accent-ink: #111111; --accent-soft: #dff3e0;
+    --plus: #14532d; --head-bg: #6bcb77; --head-ink: #111111; --head-sub: #163a20;
+    --th-bg: #6bcb77; --row-hover: #dff3e0; --row-sel: #6bcb77;
+  }
+  [data-theme="brutal"][data-brutal="moss"] {
+    --accent: #8a9a5b; --accent-ink: #111111; --accent-soft: #e7ead8;
+    --plus: #3f4a26; --head-bg: #8a9a5b; --head-ink: #111111; --head-sub: #2c331a;
+    --th-bg: #8a9a5b; --row-hover: #e7ead8; --row-sel: #b5c185;
+  }
+  [data-theme="brutal"][data-brutal="pink"] {
+    --accent: #ff90e8; --accent-ink: #111111; --accent-soft: #ffd6f7;
+    --plus: #1a936f; --head-bg: #ff90e8; --head-ink: #111111; --head-sub: #4a1a40;
+    --th-bg: #ff90e8; --row-hover: #ffd6f7; --row-sel: #ff90e8;
+  }
+  [data-theme="brutal"][data-brutal="orange"] {
+    --accent: #ff8a5c; --accent-ink: #111111; --accent-soft: #ffe1d4;
+    --plus: #1a936f; --head-bg: #ff8a5c; --head-ink: #111111; --head-sub: #4a2313;
+    --th-bg: #ff8a5c; --row-hover: #ffe1d4; --row-sel: #ff8a5c;
+  }
+  [data-theme="brutal"][data-brutal="lavender"] {
+    --accent: #b28dff; --accent-ink: #111111; --accent-soft: #e5d9ff;
+    --plus: #1a936f; --head-bg: #b28dff; --head-ink: #111111; --head-sub: #2e1a4a;
+    --th-bg: #b28dff; --row-hover: #e5d9ff; --row-sel: #b28dff;
+  }
+  [data-theme="brutal"][data-brutal="teal"] {
+    --accent: #23a094; --accent-ink: #111111; --accent-soft: #d2ece9;
+    --plus: #14532d; --head-bg: #23a094; --head-ink: #111111; --head-sub: #0e3f3a;
+    --th-bg: #23a094; --row-hover: #d2ece9; --row-sel: #23a094;
+  }
+
+  [data-theme="retro"] {
+    --font: 14px/1.5 "Chakra Petch", system-ui, sans-serif;
+    --font-display: 800 18px/1.2 "Orbitron", system-ui, sans-serif;
+    --bg: #120826; --panel: #190e36; --panel-solid: #190e36;
+    --ink: #eae4ff; --muted: #9d8fc7; --line: #8b5cf6;
+    --accent: #ff2ec4; --accent-ink: #ffffff; --accent-soft: rgba(0,229,255,0.12);
+    --plus: #00e676; --minus: #ff5252;
+    --head-bg: linear-gradient(90deg, #2b0a4e 0%, #0f0c33 60%, #14355c 100%);
+    --head-ink: #ffffff; --head-sub: #9d8fc7;
+    --th-bg: #241447; --row-hover: rgba(0,229,255,0.09); --row-sel: rgba(255,46,196,0.28);
+    --bw: 1px; --rad: 10px; --rad-sm: 8px;
+    --panel-shadow: 0 0 18px rgba(255,46,196,0.18), 0 0 4px rgba(139,92,246,0.35);
+    --btn-shadow: none;
+    --ctl-bg: #241447;
+  }
+  [data-theme="glass"] {
+    --font: 14px/1.5 "Inter", system-ui, sans-serif;
+    --font-display: 600 18px/1.2 "Inter", system-ui, sans-serif;
+    --bg: #0b1026; --panel: rgba(255,255,255,0.06); --panel-solid: #171f3d;
+    --ink: #e8ecff; --muted: #9aa5cc; --line: rgba(255,255,255,0.14);
+    --accent: #7dd3fc; --accent-ink: #071019; --accent-soft: rgba(125,211,252,0.14);
+    --plus: #34d399; --minus: #fb7185;
+    --head-bg: rgba(11,16,38,0.6); --head-ink: #f1f4ff; --head-sub: #9aa5cc;
+    --th-bg: #1c2547; --row-hover: rgba(125,211,252,0.10); --row-sel: rgba(125,211,252,0.22);
+    --bw: 1px; --rad: 14px; --rad-sm: 9px;
+    --panel-shadow: 0 8px 32px rgba(0,0,0,0.45); --btn-shadow: none;
+    --ctl-bg: rgba(255,255,255,0.08);
+  }
+
+  /* ============ structure ============ */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: var(--font); color: var(--ink); background: var(--bg); }
+  [data-theme="glass"] body, body[data-glassbg] { }
+  header { background: var(--head-bg); color: var(--head-ink); padding: 10px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font: var(--font-display); margin: 0; }
+  header .sub { color: var(--head-sub); font-size: 12.5px; }
+  header a { color: var(--head-sub); }
+  #themepick { margin-left: auto; }
+  #layout { display: grid; grid-template-columns: 300px 1fr; gap: 12px; padding: 12px; height: calc(100vh - 46px); }
+  #layout { position: relative; }
+  #layout.collapsed { grid-template-columns: 34px 1fr; }
+  #filters { background: var(--panel); border: var(--bw) solid var(--line); border-radius: var(--rad); padding: 12px; overflow-y: auto; box-shadow: var(--panel-shadow); display: flex; flex-direction: column; }
+  #filters > * { flex: none; }
+  #layout.collapsed #filters { display: none; }
+  /* external tab straddling the sidebar's right edge */
+  #sidetab { position: absolute; top: 104px; left: calc(312px - var(--bw)); z-index: 900; width: 26px; height: 46px;
+    padding: 0; font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    background: var(--panel-solid); border: var(--bw) solid var(--line); border-left: none;
+    border-radius: 0 10px 10px 0; box-shadow: var(--btn-shadow); transition: left .15s ease; }
+  #layout.collapsed #sidetab { left: calc(46px - var(--bw)); }
+  #filters::-webkit-scrollbar { width: 8px; }
+  #filters::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  #filters::-webkit-scrollbar-track { background: transparent; }
+  #sidetab:hover { background: var(--accent-soft); }
+  /* slim rail shown while collapsed */
+  #rail { display: none; border: var(--bw) solid var(--line); background: var(--panel); border-radius: var(--rad);
+    cursor: pointer; box-shadow: var(--panel-shadow); padding: 14px 2px 10px; align-items: flex-start; justify-content: center; }
+  #layout.collapsed #rail { display: flex; }
+  #rail:hover { background: var(--accent-soft); }
+  #rail span { writing-mode: vertical-rl; font-size: 11px; letter-spacing: .12em; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 900px) { #sidetab, #rail { display: none !important; } #layout.collapsed #filters { display: block; } }
+  #main { display: grid; grid-template-rows: minmax(200px, 45%) auto 1fr; gap: 10px; min-width: 0; min-height: 0; }
+  #main.mapbig { grid-template-rows: 1fr auto 150px; }
+  #mapwrap { position: relative; min-height: 0; }
+  #map { height: 100%; border: var(--bw) solid var(--line); border-radius: var(--rad); min-height: 200px; box-shadow: var(--panel-shadow); background: var(--bg); }
+  #maptab { position: absolute; bottom: -21px; left: 50%; transform: translateX(-50%); z-index: 900;
+    width: 46px; height: 21px; padding: 0; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    background: var(--panel-solid); border: var(--bw) solid var(--line); border-top: none;
+    border-radius: 0 0 10px 10px; box-shadow: var(--btn-shadow); }
+  #maptab:hover { background: var(--accent-soft); }
+  #toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #tablewrap { background: var(--panel); border: var(--bw) solid var(--line); border-radius: var(--rad); overflow: auto; min-height: 0; box-shadow: var(--panel-shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--th-bg); cursor: pointer; user-select: none; white-space: nowrap; box-shadow: 0 var(--bw) 0 var(--line); }
+  th .dir { color: var(--accent); }
+  [data-theme="brutal"] th .dir, [data-theme="brutal"] th { color: var(--head-ink); }
+  tr:hover td { background: var(--row-hover); cursor: pointer; }
+  tr.sel td { background: var(--row-sel); }
+  td .nm { font-weight: 600; }
+  td .var { color: var(--muted); font-weight: 400; }
+  td a { color: var(--accent); text-decoration: none; }
+  [data-theme="brutal"] td a { color: #0057ff; }
+  td a:hover { text-decoration: underline; }
+  .sptags { color: var(--muted); font-size: 12px; }
+  .sptags b { color: var(--ink); font-weight: 500; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+  [data-theme="brutal"] h3 { color: var(--ink); font-weight: 700; }
+  h3:first-child { margin-top: 0; }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 8px; }
+  input[type=text], select { width: 100%; padding: 6px 8px; border: var(--bw) solid var(--line); border-radius: var(--rad-sm); font: inherit; background: var(--ctl-bg); color: var(--ink); }
+  [data-theme="glass"] select option { background: var(--panel-solid); }
+  .row2 { display: flex; gap: 6px; }
+  .chk { display: block; margin: 2px 0; }
+  #splist { flex: 1 1 auto; min-height: 140px; overflow-y: auto; border: var(--bw) solid var(--line); border-radius: var(--rad-sm); padding: 4px; background: var(--ctl-bg); }
+  .sp { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 5px; cursor: pointer; }
+  .sp:hover { background: var(--accent-soft); }
+  .sp .st { width: 18px; height: 18px; border: var(--bw) solid var(--line); border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex: none; background: var(--ctl-bg); color: var(--ink); }
+  .sp.inc .st { background: var(--plus); border-color: var(--plus); color: #fff; }
+  .sp.exc .st { background: var(--minus); border-color: var(--minus); color: #fff; }
+  [data-theme="brutal"] .sp.inc .st, [data-theme="brutal"] .sp.exc .st { border-color: var(--ink); }
+  .sp.exc .lbl { text-decoration: line-through; color: var(--muted); }
+  .groupbtns { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+  button { font: inherit; padding: 5px 10px; border: var(--bw) solid var(--line); background: var(--ctl-bg); color: var(--ink); border-radius: var(--rad-sm); cursor: pointer; box-shadow: var(--btn-shadow); }
+  button:hover { background: var(--accent-soft); }
+  [data-theme="brutal"] button:hover { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #111; }
+  [data-theme="brutal"] button:active { transform: translate(3px, 3px); box-shadow: none; }
+  button.primary { background: var(--accent); border-color: var(--line); color: var(--accent-ink); }
+  button.primary:hover { filter: brightness(0.93); background: var(--accent); }
+  button.mini { padding: 2px 8px; font-size: 12px; }
+  #count { font-weight: 600; }
+  #mapstatus { color: var(--muted); font-size: 12.5px; }
+  .toggle { display: inline-flex; border: var(--bw) solid var(--line); border-radius: var(--rad-sm); overflow: hidden; box-shadow: var(--btn-shadow); }
+  .toggle button { border: 0; border-radius: 0; box-shadow: none; }
+  #themepick button { padding: 6px 10px; display: inline-flex; align-items: center; }
+  #themepick svg { width: 17px; height: 17px; fill: currentColor; display: block; }
+  #brutalpick { display: none; align-items: center; gap: 7px; }
+  [data-theme="brutal"] #brutalpick { display: inline-flex; }
+  #brutalpick .dot { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid #111; box-shadow: 2px 2px 0 #111; }
+  #brutalpick .dot:hover { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #111; }
+  #brutalpick .dot.on { outline: 2px solid #111; outline-offset: 2px; }
+  .toggle button.on { background: var(--accent); color: var(--accent-ink); }
+  [data-theme="brutal"] .toggle button:hover { transform: none; box-shadow: none; }
+  .legend { font-size: 12px; color: var(--muted); margin: 2px 0 10px; display: flex; flex-direction: column; gap: 3px; }
+  .legend .st { display: inline-flex; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; }
+  .legend-off { padding-left: 20px; font-size: 11.5px; opacity: 0.85; }
+
+  /* ============ retro extras ============ */
+  [data-theme="retro"] { background: linear-gradient(180deg, #0d0628 0%, #1c0b3f 55%, #3b0f56 100%); }
+  [data-theme="retro"] body { background: transparent; min-height: 100vh; }
+  [data-theme="retro"] body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px); }
+  [data-theme="retro"] header { border-bottom: 1px solid #ff2ec4; box-shadow: 0 0 16px rgba(255,46,196,0.35); }
+  [data-theme="retro"] header h1 { color: #fff; letter-spacing: .08em; text-transform: uppercase;
+    text-shadow: 0 0 8px #ff2ec4, 0 0 22px rgba(255,46,196,0.65); }
+  [data-theme="retro"] button:hover { box-shadow: 0 0 10px rgba(0,229,255,0.5); background: var(--accent-soft); }
+  [data-theme="retro"] .toggle button.on { box-shadow: 0 0 12px rgba(255,46,196,0.6) inset, 0 0 8px rgba(255,46,196,0.5); }
+  [data-theme="retro"] th { text-transform: uppercase; font-size: 11.5px; letter-spacing: .07em; }
+  [data-theme="retro"] select option { background: var(--panel-solid); }
+  [data-theme="retro"] a { color: #00e5ff; }
+  [data-theme="retro"] td a { color: #00e5ff; }
+  [data-theme="retro"] .leaflet-control-layers-toggle { filter: invert(1); }
+  [data-theme="retro"] .leaflet-bar a { border-bottom-color: rgba(255,255,255,0.2); }
+
+  /* ============ glass extras ============ */
+  [data-theme="glass"] { background: linear-gradient(160deg, #0b1026 0%, #131a3a 45%, #251b45 100%); }
+  [data-theme="glass"] body { background: transparent; min-height: 100vh; }
+  [data-theme="glass"] #filters, [data-theme="glass"] #tablewrap, [data-theme="glass"] header { backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  [data-theme="glass"] header { border-bottom: 1px solid var(--line); }
+  [data-theme="glass"] th { backdrop-filter: none; }
+  [data-theme="glass"] a { color: var(--accent); }
+
+  /* leaflet chrome per theme */
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel-solid); color: var(--ink); }
+  .leaflet-popup-content a { color: var(--accent); }
+  [data-theme="brutal"] .leaflet-popup-content-wrapper { border: 2px solid #111; border-radius: 4px; box-shadow: 4px 4px 0 #111; }
+  [data-theme="brutal"] .leaflet-popup-content a { color: #0057ff; }
+  .leaflet-bar a { background: var(--panel-solid); color: var(--ink); border-bottom-color: var(--line); }
+  [data-theme="glass"] .leaflet-bar a { border-bottom-color: rgba(255,255,255,0.2); }
+  .leaflet-control-layers { background: var(--panel-solid); color: var(--ink); border-radius: var(--rad-sm); }
+  [data-theme="brutal"] .leaflet-control-layers { border: 2px solid #111; box-shadow: 3px 3px 0 #111; }
+  [data-theme="glass"] .leaflet-control-layers { border: 1px solid var(--line); }
+  .leaflet-control-layers-toggle { filter: none; }
+  [data-theme="glass"] .leaflet-control-layers-toggle { filter: invert(1); }
+
+  /* header on brutal gets the border treatment */
+  [data-theme="brutal"] header { border-bottom: 3px solid #111; }
+
+  @media (max-width: 900px) {
+    #layout { grid-template-columns: 1fr; height: auto; }
+    #main { grid-template-rows: 300px auto auto; }
+    #tablewrap { max-height: 60vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Idaho Stream Finder</h1>
+  <span class="sub">species-observed filters over the <a href="https://idfg.idaho.gov/ifwis/fishingplanner/" target="_blank" rel="noopener">IDFG Fishing Planner</a> dataset · <span id="gendate"></span></span>
+  <span class="toggle" id="themepick">
+    <button data-t="field" title="Field Guide — clean topo-map look" aria-label="Field Guide theme"><svg viewBox="0 0 18 18"><path d="M1 15 L6.2 4.5 L9.6 10.8 L11.6 7.6 L17 15 Z"/></svg></button><button data-t="brutal" title="Brutal — neubrutalism" aria-label="Brutal theme"><svg viewBox="0 0 18 18"><rect x="6.5" y="6.5" width="9" height="9"/><rect x="2.5" y="2.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2"/></svg></button><button data-t="glass" title="Midnight — dark glassmorphism" aria-label="Midnight theme"><svg viewBox="0 0 18 18"><path d="M11.5 1.5 A7.5 7.5 0 1 0 16.5 11.5 A6.2 6.2 0 0 1 11.5 1.5 Z"/></svg></button><button data-t="retro" title="Retro — retrofuturism / synthwave" aria-label="Retro theme"><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="3.6"/><ellipse cx="9" cy="9" rx="8" ry="2.9" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(-22 9 9)"/></svg></button>
+  </span>
+  <span id="brutalpick" aria-label="Brutal colorway">
+    <button class="dot" data-c="pine" style="background:#2d6a4f" title="Pine"></button>
+    <button class="dot" data-c="yellow" style="background:#ffd23f" title="Yellow (the original)"></button>
+    <button class="dot" data-c="grass" style="background:#6bcb77" title="Grass"></button>
+    <button class="dot" data-c="moss" style="background:#8a9a5b" title="Moss"></button>
+    <button class="dot" data-c="pink" style="background:#ff90e8" title="Pink"></button>
+    <button class="dot" data-c="orange" style="background:#ff8a5c" title="Orange"></button>
+    <button class="dot" data-c="lavender" style="background:#b28dff" title="Lavender"></button>
+    <button class="dot" data-c="teal" style="background:#23a094" title="Teal"></button>
+  </span>
+</header>
+
+<div id="layout">
+  <button id="sidetab" title="hide filters" aria-label="Toggle filter sidebar">«</button>
+  <button id="rail" title="show filters" aria-label="Show filter sidebar"><span>FILTERS</span></button>
+  <aside id="filters">
+    <h3>Species observed</h3>
+    <div class="legend">
+      <div><span class="st" style="background:var(--plus)">✓</span> 1st click — must have</div>
+      <div><span class="st" style="background:var(--minus)">✕</span> 2nd click — must not have</div>
+      <div class="legend-off">3rd click clears it</div>
+    </div>
+    <div class="groupbtns" id="groupbtns"></div>
+    <span class="toggle" id="spscope" style="margin-bottom:6px">
+      <button data-s="all" class="on" title="show every species in the list">All</button><button data-s="typical" title="the 17 trout you actually chase">Typical trout</button><button data-s="trout" title="all salmonids: trout, salmon, char, whitefish, grayling…">Trout &amp; salmon</button>
+    </span>
+    <input type="text" id="spsearch" placeholder="Search species…">
+    <div id="splist" style="margin-top:6px"></div>
+    <div style="margin-top:8px">Require mode:
+      <span class="toggle" id="reqmode">
+        <button data-v="any" class="on" title="water must have at least one required species">any</button><button data-v="all" title="water must have every required species">all</button>
+      </span>
+    </div>
+
+    <h3>Water type</h3>
+    <label class="chk"><input type="checkbox" id="t-stream" checked> Rivers &amp; streams</label>
+    <label class="chk"><input type="checkbox" id="t-lake" checked> Lakes &amp; reservoirs</label>
+
+    <h3>Where</h3>
+    <select id="region"></select>
+    <div style="height:6px"></div>
+    <select id="county"></select>
+    <div style="height:6px"></div>
+    <input type="text" id="namesearch" placeholder="Water name contains…">
+    <label class="chk" style="margin-top:8px" title="waters with at least one survey/stocking species record"><input type="checkbox" id="surveyed" checked> Only waters with survey data</label>
+    <div class="row2" style="margin-top:12px">
+      <select id="presets" style="flex:1" title="load a saved filter set"><option value="">Saved filters…</option></select>
+      <button id="savepreset" title="save current filters as a preset">💾</button>
+      <button id="delpreset" title="delete the selected preset">🗑</button>
+    </div>
+    <div style="margin-top:8px"><button id="reset">Reset all filters</button></div>
+  </aside>
+
+  <div id="main">
+    <div id="mapwrap">
+      <div id="map"></div>
+      <button id="maptab" title="expand map" aria-label="Toggle map size">⌄</button>
+    </div>
+    <div id="toolbar">
+      <span id="count"></span>
+      <button class="primary" id="mapall">Map results</button>
+      <button id="clearmap">Clear map</button>
+      <button id="exportcsv">Export CSV</button>
+      <span id="mapstatus"></span>
+    </div>
+    <div id="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="name">Name <span class="dir"></span></th>
+          <th data-k="county">County <span class="dir"></span></th>
+          <th data-k="region">Region <span class="dir"></span></th>
+          <th data-k="trib">Drainage <span class="dir"></span></th>
+          <th data-k="layer">Type <span class="dir"></span></th>
+          <th data-k="size">Size <span class="dir"></span></th>
+          <th data-k="spn">Species observed <span class="dir"></span></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
