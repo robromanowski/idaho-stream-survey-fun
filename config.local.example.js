@@ -20,11 +20,6 @@ window.CALTOPO_CONFIG = {
   attribution: "CalTopo",
 };
 
-// ---- Mapbox (free tier: 200,000 tile requests/month, no card required) ----
-// How to get a token:
-//   1. Sign up / log in at mapbox.com
-//   2. Account -> Tokens -> copy your "Default public token" (starts with "pk.")
-//      (a public token is fine and expected here — that's what it's for)
-window.MAPBOX_CONFIG = {
-  token: "",                // e.g. "pk.eyJ1Ijoi..."
-};
+// Mapbox lives in the committed config.js instead of here — its token is
+// domain-restricted (Account -> Tokens -> URL restrictions) so it's safe to
+// publish, unlike the CalTopo WMTS URL above.
