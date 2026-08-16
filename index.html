@@ -186,6 +186,11 @@
   button.mini { padding: 2px 8px; font-size: 12px; }
   #count { font-weight: 600; }
   #mapstatus { color: var(--muted); font-size: 12.5px; }
+  #landlegend { position: absolute; left: 11px; bottom: 11px; z-index: 900; align-items: center; gap: 5px;
+    background: var(--panel-solid); border: var(--bw) solid var(--line); border-radius: var(--rad-sm);
+    padding: 5px 9px; font-size: 12px; color: var(--muted); box-shadow: var(--btn-shadow); }
+  #landlegend .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.25); flex: none; }
+  #landlegend .more { color: var(--muted); opacity: .75; }
   .toggle { display: inline-flex; border: var(--bw) solid var(--line); border-radius: var(--rad-sm); overflow: hidden; box-shadow: var(--btn-shadow); }
   .toggle button { border: 0; border-radius: 0; box-shadow: none; }
   #themepick button { padding: 6px 10px; display: inline-flex; align-items: center; }
@@ -301,6 +306,10 @@
     <div style="height:6px"></div>
     <input type="text" id="namesearch" placeholder="Water name contains…">
     <label class="chk" style="margin-top:8px" title="waters with at least one survey/stocking species record"><input type="checkbox" id="surveyed" checked> Only waters with survey data</label>
+
+    <h3>Recency</h3>
+    <div class="hint">A required species only counts if seen since this year; an excluded species stops disqualifying a water once its only record predates it. Blank = ignore survey age.</div>
+    <input type="number" id="minyear" placeholder="e.g. 2015" min="1950">
     <div class="row2" style="margin-top:12px">
       <select id="presets" style="flex:1" title="load a saved filter set"><option value="">Saved filters…</option></select>
       <button id="savepreset" title="save current filters as a preset">💾</button>
@@ -313,12 +322,23 @@
     <div id="mapwrap">
       <div id="map"></div>
       <button id="maptab" title="expand map" aria-label="Toggle map size">⌄</button>
+      <div id="landlegend" style="display:none">
+        <span class="sw" style="background:rgb(254,230,121)"></span>BLM
+        <span class="sw" style="background:rgb(204,234,198)"></span>USFS
+        <span class="sw" style="background:rgb(202,189,220)"></span>NPS
+        <span class="more">· also State, Tribal, USFW, other federal (uncolored here)</span>
+      </div>
     </div>
     <div id="toolbar">
       <span id="count"></span>
       <button class="primary" id="mapall">Map results</button>
       <button id="clearmap">Clear map</button>
       <button id="exportcsv">Export CSV</button>
+      <button id="exportgpx" title="Export whatever's currently drawn on the map as a GPX track file — import into Gaia GPS, onX, CalTopo, etc.">Export GPX</button>
+      <label class="chk" style="display:inline-flex;align-items:center;gap:4px;margin:0"
+        title="onX rejects files over 4MB and individual tracks over ~1,500 points, so long/multi-part streams get split into numbered pieces. Uncheck for Gaia/CalTopo — every water stays exactly one track, never split, however big. Large exports may still span a few files either way (a save/upload step can fail on one huge file even when its preview parser handles it fine), but that never affects any single track.">
+        <input type="checkbox" id="gpx-onx-safe" checked> onX-safe splitting
+      </label>
       <span id="mapstatus"></span>
     </div>
     <div id="tablewrap">
@@ -339,6 +359,8 @@
 </div>
 
 <script src="data.js"></script>
+<!-- personal, gitignored — 404s harmlessly if absent, see config.local.example.js -->
+<script src="config.local.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
 </body>

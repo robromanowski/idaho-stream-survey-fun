@@ -16,7 +16,14 @@ const GROUPS = {
   "No brook trout": ["Brook Trout", "Brook Trout - Triploid"],
   "Any cutbow/hybrid": ["Cutbow - Cutthroat x Rainbow Trout", "Rainbow x Cutthroat - Diploid", "Rainbow x Cutthroat - Triploid"],
 };
-const ROW_CAP = 500, MAP_CAP = 300;
+// MAP_CAP: tested at 2,613 waters (~broadest realistic single-species statewide
+// query) drawing correctly in ~23s — 3000 leaves headroom for that while still
+// guarding against the pathological "no filters at all" case (~14,000 waters).
+// Both capped at the same value so the table and "Map results" never disagree
+// about how much of a large filter is actually shown. Tested at 2,613 rows
+// (~broadest realistic single-species statewide query): sort/search/render all
+// land ~350-400ms, no jank — comfortable headroom under 3000.
+const ROW_CAP = 3000, MAP_CAP = 3000;
 
 const speciesById = {};
 for (const [name, id] of Object.entries(DATA.species)) speciesById[id] = name;
@@ -31,6 +38,17 @@ for (const w of DATA.waters) {
   w.searchName = (w.name + " " + (w.var || "")).toLowerCase();
   // sort key ignoring leading punctuation (e.g. 'Imnamatnoon Creek files under I) and case
   w.sortName = w.name.replace(/^[^a-z0-9]+/i, "").toLowerCase();
+  // species id -> year last observed (from build_years.py); absent = year unknown
+  w.spyMap = new Map(Object.entries(w.spy || {}).map(([id, yr]) => [+id, yr]));
+}
+
+// True unless a recency filter is set and we have a too-old (or no) record.
+// Used symmetrically: for "must have" it's whether the sighting still counts;
+// for "must not have" it's whether an old sighting still disqualifies the water.
+function recentEnough(w, id, minYear) {
+  if (!minYear) return true;
+  if (!w.spyMap.has(id)) return true;   // no year on file — don't penalize either way
+  return w.spyMap.get(id) >= minYear;
 }
 
 // ---------- state ----------
@@ -41,6 +59,10 @@ let filtered = [];
 
 // ---------- filter panel ----------
 const $ = s => document.querySelector(s);
+// tolerate an element missing (e.g. stale cached HTML alongside fresh app.js)
+// instead of throwing and silently aborting the whole filter pass
+const val = s => $(s)?.value ?? "";
+const setVal = (s, v) => { const el = $(s); if (el) el.value = v; };
 document.getElementById("gendate").textContent = "data " + DATA.generated;
 
 const splist = $("#splist");
@@ -146,13 +168,14 @@ countySel.innerHTML = `<option value="">All counties</option>` +
 for (const id of ["t-stream", "t-lake", "surveyed", "region", "county"])
   document.getElementById(id).addEventListener("change", refresh);
 $("#namesearch").addEventListener("input", debounce(refresh, 200));
+$("#minyear")?.addEventListener("input", debounce(refresh, 300));
 
 $("#reset").onclick = () => {
   spState.clear();
   $("#t-stream").checked = $("#t-lake").checked = true;
   $("#surveyed").checked = true;
   regionSel.value = countySel.value = "";
-  $("#namesearch").value = ""; $("#spsearch").value = "";
+  $("#namesearch").value = ""; $("#spsearch").value = ""; setVal("#minyear", "");
   $("#presets").value = "";   // so re-selecting the same preset fires change again
   spScope = "all";
   for (const btn of $("#spscope").children) btn.classList.toggle("on", btn.dataset.s === "all");
@@ -170,6 +193,7 @@ function applyFilters() {
   const county = countySel.value || null;
   const surveyed = $("#surveyed").checked;
   const q = $("#namesearch").value.trim().toLowerCase();
+  const minYear = +val("#minyear") || null;
 
   filtered = DATA.waters.filter(w => {
     if (w.layer === 1 ? !wantStream : !wantLake) return false;
@@ -178,10 +202,11 @@ function applyFilters() {
     if (surveyed && w.spn === 0) return false;
     if (q && !w.searchName.includes(q)) return false;
     if (inc.length) {
-      if (reqMode === "all") { for (const id of inc) if (!w.spSet.has(id)) return false; }
-      else if (!inc.some(id => w.spSet.has(id))) return false;
+      const has = id => w.spSet.has(id) && recentEnough(w, id, minYear);
+      if (reqMode === "all") { for (const id of inc) if (!has(id)) return false; }
+      else if (!inc.some(has)) return false;
     }
-    for (const id of exc) if (w.spSet.has(id)) return false;
+    for (const id of exc) if (w.spSet.has(id) && recentEnough(w, id, minYear)) return false;
     return true;
   });
 
@@ -201,10 +226,21 @@ function applyFilters() {
 // ---------- table ----------
 const tbody = $("#tbl tbody");
 
+// "Cutthroat Trout" -> "Cutthroat Trout ('14)", or plain if no year on file
+function speciesLabel(w, id) {
+  const name = speciesById[id] || id;
+  const yr = w.spyMap.get(id);
+  return yr ? `${name} ('${String(yr).slice(-2)})` : name;
+}
+
 function speciesCell(w) {
-  const names = w.sp.map(id => speciesById[id] || id).sort();
-  const shown = names.slice(0, 6).map(n => /Trout|Salmon|Steelhead|Grayling|Whitefish|Kokanee|Char/i.test(n) ? `<b>${n}</b>` : n);
-  const more = names.length > 6 ? ` <i>+${names.length - 6} more</i>` : "";
+  const ids = [...w.sp].sort((a, b) => (speciesById[a] || "").localeCompare(speciesById[b] || ""));
+  const shown = ids.slice(0, 6).map(id => {
+    const label = speciesLabel(w, id);
+    return /Trout|Salmon|Steelhead|Grayling|Whitefish|Kokanee|Char/i.test(speciesById[id] || "")
+      ? `<b>${label}</b>` : label;
+  });
+  const more = ids.length > 6 ? ` <i>+${ids.length - 6} more</i>` : "";
   return `<span class="sptags">${shown.join(", ")}${more}</span>`;
 }
 
@@ -252,8 +288,11 @@ document.querySelector("#tbl thead").addEventListener("click", e => {
 
 // ---------- basemaps ----------
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
-const BASEMAP_DEFS = {   // name -> {urls: [base, optional labels layer], maxNative}
+const BASEMAP_DEFS = {   // name -> {urls: [base, optional labels layer], maxNative, subdomains?}
   "Topo": { urls: [`${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`], maxNative: 17 },
+  "OpenTopoMap (trails)": { urls: ["https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"],
+                            maxNative: 17, subdomains: "abc",
+                            attribution: "OpenTopoMap (CC-BY-SA) | map data OSM" },
   "USA Topo (USGS)": { urls: [`${ESRI}/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}`], maxNative: 15 },
   "National Geographic": { urls: [`${ESRI}/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}`], maxNative: 16 },
   "Streets": { urls: [`${ESRI}/World_Street_Map/MapServer/tile/{z}/{y}/{x}`], maxNative: 17 },
@@ -264,12 +303,31 @@ const BASEMAP_DEFS = {   // name -> {urls: [base, optional labels layer], maxNat
   "Dark Gray": { urls: [`${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
                         `${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`], maxNative: 16 },
 };
+// Personal, gitignored (see config.local.example.js) — absent for anyone else who clones this repo,
+// in which case the CalTopo option just doesn't appear and everything else works as normal.
+if (window.CALTOPO_CONFIG?.wmtsUrl) {
+  BASEMAP_DEFS["CalTopo"] = {
+    urls: [window.CALTOPO_CONFIG.wmtsUrl],
+    maxNative: window.CALTOPO_CONFIG.maxNativeZoom || 16,
+    attribution: window.CALTOPO_CONFIG.attribution || "CalTopo",
+  };
+}
+if (window.MAPBOX_CONFIG?.token) {
+  BASEMAP_DEFS["Mapbox Outdoors"] = {
+    urls: [`https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}` +
+           `?access_token=${window.MAPBOX_CONFIG.token}`],
+    maxNative: 18,
+    attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> ' +
+                 '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  };
+}
 const THEME_BASEMAP = { field: "Topo", brutal: "Light Gray", glass: "Dark Gray", retro: "Dark Gray" };
 const baseGroups = {};
 for (const [name, def] of Object.entries(BASEMAP_DEFS)) {
   baseGroups[name] = L.layerGroup(def.urls.map((url, i) => L.tileLayer(url, {
     maxNativeZoom: def.maxNative, maxZoom: 17,
-    attribution: i === 0 ? "Esri, USGS | IDFG hydrography" : "",
+    subdomains: def.subdomains || "abc",
+    attribution: i === 0 ? (def.attribution || "Esri, USGS | IDFG hydrography") : "",
   })));
 }
 let currentBase = null;
@@ -280,6 +338,17 @@ function setBasemap(name) {
   baseGroups[name].addTo(map);
   currentBase = name;
 }
+
+// ---------- public land overlay (BLM Surface Management Agency) ----------
+// tile pyramid, no API key; shows federal/state land ownership over any basemap.
+// (built here, wired to the map + control further down once `map` exists)
+const PUBLIC_LAND_URL = "https://gis.blm.gov/arcgis/rest/services/lands/" +
+  "BLM_Natl_SMA_Cached_without_PriUnk/MapServer/tile/{z}/{y}/{x}";
+const publicLandLayer = L.tileLayer(PUBLIC_LAND_URL, {
+  maxNativeZoom: 15, maxZoom: 17, opacity: 0.55,
+  attribution: "BLM Surface Management Agency",
+});
+const overlayGroups = { "Public land (BLM/USFS/NPS/State…)": publicLandLayer };
 const MAP_COLORS = {   // sel = clicked highlight; stream/lake = "Map results" colors
   field: { sel: "#e2712e", stream: "#1e6fb8", lake: "#1a8f9c" },
   brutal: { sel: "#ef476f", stream: "#0057ff", lake: "#1a936f" },
@@ -356,7 +425,10 @@ if (localStorage.getItem("isf-mapbig") === "1") {
 const map = L.map("map", { preferCanvas: true }).setView([45.3, -114.2], 7);
 const resultsLayer = L.featureGroup().addTo(map);
 const selLayer = L.featureGroup().addTo(map);
-L.control.layers(baseGroups, null, { position: "topright" }).addTo(map);
+L.control.layers(baseGroups, overlayGroups, { position: "topright" }).addTo(map);
+const landLegend = document.getElementById("landlegend");
+map.on("overlayadd", e => { if (e.layer === publicLandLayer) landLegend.style.display = "flex"; });
+map.on("overlayremove", e => { if (e.layer === publicLandLayer) landLegend.style.display = "none"; });
 map.on("baselayerchange", e => {   // user picked from the layers control
   currentBase = Object.keys(baseGroups).find(n => baseGroups[n] === e.layer) || currentBase;
 });
@@ -383,7 +455,8 @@ async function fetchGeom(ids, layer) {
 function waterById(id) { return DATA.waters.find(w => w.id === id); }
 
 function popupHtml(w) {
-  const names = w.sp.map(id => speciesById[id] || id).sort().join(", ");
+  const ids = [...w.sp].sort((a, b) => (speciesById[a] || "").localeCompare(speciesById[b] || ""));
+  const names = ids.map(id => speciesLabel(w, id)).join(", ");
   return `<b>${w.name}</b>${w.var ? ` (${w.var})` : ""}<br>${w.trib || ""}<br>
     <small>${names || "no survey records"}</small><br>
     <a href="${WATER_URL(w.id)}" target="_blank" rel="noopener">IDFG water page ↗</a>`;
@@ -455,7 +528,8 @@ $("#exportcsv").onclick = () => {
   for (const w of filtered) {
     lines.push([w.name, w.var || "", w.county, REGION_NAMES[w.region] || "", w.trib,
       w.layer === 1 ? "stream" : "lake", w.size,
-      w.sp.map(id => speciesById[id]).sort().join("; "), WATER_URL(w.id)].map(esc).join(","));
+      [...w.sp].sort((a, b) => (speciesById[a] || "").localeCompare(speciesById[b] || ""))
+        .map(id => speciesLabel(w, id)).join("; "), WATER_URL(w.id)].map(esc).join(","));
   }
   const blob = new Blob([lines.join("\r\n")], { type: "text/csv" });
   const a = document.createElement("a");
@@ -463,6 +537,153 @@ $("#exportcsv").onclick = () => {
   a.download = "idaho-waters.csv";
   a.click();
   URL.revokeObjectURL(a.href);
+};
+
+// ---------- gpx (import into Gaia/onX/CalTopo/etc. as tracks) ----------
+// Exports whatever's currently drawn on the map (highlighted water + any
+// "Map results" set) — not the whole filtered table, just what's visible —
+// using the same geometry already fetched from IDFG's hydrography service.
+function currentMapFeatures() {
+  const byLLID = new Map();
+  for (const layer of [resultsLayer, selLayer]) {
+    for (const f of layer.toGeoJSON().features) byLLID.set(f.properties.LLID, f);
+  }
+  return [...byLLID.values()];
+}
+
+function featureLines(geom) {
+  if (geom.type === "LineString") return [geom.coordinates];
+  if (geom.type === "MultiLineString") return geom.coordinates;
+  if (geom.type === "Polygon") return geom.coordinates;       // lake ring(s)
+  if (geom.type === "MultiPolygon") return geom.coordinates.flat();
+  return [];
+}
+
+const GPX_HEADER = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+  '<gpx version="1.1" creator="Idaho Stream Finder" xmlns="http://www.topografix.com/GPX/1/1">\n';
+const GPX_FOOTER = "</gpx>\n";
+const byteLen = s => new Blob([s]).size;
+
+// onX's own support docs: a single unusually large/dense track can fail an
+// import independently of overall file size, and their fix is to split that
+// track into smaller segments — so a long river gets cut into numbered parts
+// rather than shipped as one giant <trk>, regardless of total file size.
+const MAX_POINTS_PER_TRACK = 1500;
+
+function trackXMLChunks(f) {
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const w = waterById(f.properties.LLID);
+  const baseName = w ? w.name + (w.var ? ` (${w.var})` : "") : (f.properties.NAME || f.properties.LLID);
+
+  // Each entry from featureLines() is a genuinely separate physical line (a
+  // real gap in the reach — disjoint segments of the same named stream).
+  // Never merge two different lines into one track: onX was observed drawing
+  // a straight "chord" across a <trkseg> break instead of treating it as a
+  // real gap, so a new <trk> per physical line is the only reliably safe
+  // boundary. A single line longer than the cap still splits mid-line —
+  // those pieces stay genuinely adjacent, so no false connection there.
+  const pieces = [];
+  for (const line of featureLines(f.geometry)) {
+    if (line.length > MAX_POINTS_PER_TRACK) {
+      for (let i = 0; i < line.length; i += MAX_POINTS_PER_TRACK) pieces.push(line.slice(i, i + MAX_POINTS_PER_TRACK));
+    } else {
+      pieces.push(line);
+    }
+  }
+
+  return pieces.map((line, i) => {
+    const name = pieces.length > 1 ? `${baseName} (${i + 1}/${pieces.length})` : baseName;
+    const out = [`  <trk><name>${esc(name)}</name>`, "    <trkseg>"];
+    for (const [lon, lat] of line) out.push(`      <trkpt lat="${lat}" lon="${lon}"></trkpt>`);
+    out.push("    </trkseg>", "  </trk>");
+    return out.join("\n") + "\n";
+  });
+}
+
+// Simple mode (Gaia, CalTopo, etc.): exactly one <trk> per water, no matter
+// how big — a <trkseg> per genuinely disconnected line (correct per the GPX
+// spec), full point count, never split. No onX-specific workarounds applied.
+function simpleTrackXML(f) {
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const w = waterById(f.properties.LLID);
+  const name = w ? w.name + (w.var ? ` (${w.var})` : "") : (f.properties.NAME || f.properties.LLID);
+  const out = [`  <trk><name>${esc(name)}</name>`];
+  for (const line of featureLines(f.geometry)) {
+    out.push("    <trkseg>");
+    for (const [lon, lat] of line) out.push(`      <trkpt lat="${lat}" lon="${lon}"></trkpt>`);
+    out.push("    </trkseg>");
+  }
+  out.push("  </trk>");
+  return out.join("\n") + "\n";
+}
+
+// onX rejects GPX files over ~4MB (and caps at 3,000 tracks/markups per file);
+// this budget stays well under both, plus the per-track point cap above. Also
+// used as a general-purpose file-size safety net in simple/Gaia mode — a
+// single giant file can fail an app's *save/upload* step even when its
+// lightweight preview parser handled it fine (observed: a 13MB one-file
+// export previewed correctly in Gaia but silently saved 0 tracks). Splitting
+// into multiple files is unrelated to whether any one track gets split, so
+// it applies in both modes — only trackXMLChunks vs. simpleTrackXML changes.
+const GPX_MAX_BYTES = 2 * 1024 * 1024;
+
+// Packs pre-built <trk>...</trk> XML strings into files, each staying under
+// GPX_MAX_BYTES. A track is never split mid-way here — a single track larger
+// than the budget still gets its own (over-budget) file rather than being cut.
+function packIntoFiles(trackXMLs) {
+  const budget = GPX_MAX_BYTES - byteLen(GPX_HEADER) - byteLen(GPX_FOOTER);
+  const files = [];
+  let body = "", bodyBytes = 0;
+  for (const xml of trackXMLs) {
+    const xmlBytes = byteLen(xml);
+    if (body && bodyBytes + xmlBytes > budget) {
+      files.push(GPX_HEADER + body + GPX_FOOTER);
+      body = ""; bodyBytes = 0;
+    }
+    body += xml;
+    bodyBytes += xmlBytes;
+  }
+  if (body) files.push(GPX_HEADER + body + GPX_FOOTER);
+  return files;
+}
+
+function buildGPXFiles(features, onxSafe) {
+  const trackXMLs = onxSafe ? features.flatMap(trackXMLChunks) : features.map(simpleTrackXML);
+  return packIntoFiles(trackXMLs);
+}
+
+function downloadText(text, filename, mime) {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("#exportgpx").onclick = () => {
+  const features = currentMapFeatures();
+  if (!features.length) {
+    mapstatus.textContent = "nothing mapped yet — click a row or \"Map results\" first";
+    return;
+  }
+  const files = buildGPXFiles(features, $("#gpx-onx-safe").checked);
+  if (files.length === 1) {
+    downloadText(files[0], "idaho-streams.gpx", "application/gpx+xml");
+    mapstatus.textContent = "";
+    return;
+  }
+  // onX's ~4MB-per-file limit means a big export needs multiple files; stagger
+  // the downloads slightly so the browser doesn't treat them as download spam
+  mapstatus.textContent = `splitting into ${files.length} files (onX/Gaia size limits)…`;
+  files.forEach((content, i) => {
+    setTimeout(() => {
+      downloadText(content, `idaho-streams-part${i + 1}-of-${files.length}.gpx`, "application/gpx+xml");
+      if (i === files.length - 1) {
+        mapstatus.textContent = `saved ${files.length} files — import each into onX/Gaia separately`;
+      }
+    }, i * 400);
+  });
 };
 
 // ---------- filter state: capture / apply / url hash / presets ----------
@@ -474,6 +695,7 @@ function captureState() {
     stream: $("#t-stream").checked, lake: $("#t-lake").checked,
     region: regionSel.value, county: countySel.value,
     q: $("#namesearch").value.trim(), surveyed: $("#surveyed").checked,
+    minYear: val("#minyear").trim(),
   };
 }
 
@@ -489,6 +711,7 @@ function applyState(s) {
   countySel.value = s.county || "";
   $("#namesearch").value = s.q || "";
   $("#surveyed").checked = s.surveyed !== false;
+  setVal("#minyear", s.minYear || "");
   refresh();
 }
 
@@ -504,6 +727,7 @@ function updateHash() {
   if (s.county) p.set("county", s.county);
   if (s.q) p.set("q", s.q);
   if (!s.surveyed) p.set("all-waters", "1");
+  if (s.minYear) p.set("since", s.minYear);
   const h = p.toString();
   history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
 }
@@ -519,6 +743,7 @@ function parseHash() {
     stream: !p.get("nostream"), lake: !p.get("nolake"),
     region: p.get("region") || "", county: p.get("county") || "",
     q: p.get("q") || "", surveyed: !p.get("all-waters"),
+    minYear: p.get("since") || "",
   };
 }
 

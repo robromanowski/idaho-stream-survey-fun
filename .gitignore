@@ -15,3 +15,10 @@ __pycache__/
 # Go / compiled binaries
 *.exe
 *.exe~
+
+# Personal API keys (e.g. CalTopo Pro WMTS) — never publish these.
+# config.local.example.js stays tracked as the setup template.
+config.local.js
+
+# Local GPX export test files (personal scratch exports, not source)
+gpx/
